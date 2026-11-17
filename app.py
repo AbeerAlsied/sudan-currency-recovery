@@ -1,503 +1,674 @@
+# -*- coding: utf-8 -*-
+"""
+الجنيه أولاً | مركز تحليل وإنقاذ الاقتصاد السوداني
+تشغيل:
+    pip install streamlit pandas numpy plotly
+    streamlit run app.py
+
+مهم:
+- البيانات الافتراضية أدناه توضيحية وليست أرقاماً رسمية موثقة.
+- استبدلها بملف CSV موثق قبل استخدام النتائج في بحث أو قرار فعلي.
+- المحاكاة سيناريوهات افتراضية وليست توقعات اقتصادية.
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from datetime import datetime
 
-# ==========================================
-# 1. إعدادات الصفحة والهوية البصرية
-# ==========================================
+# =========================================================
+# 1) إعداد الصفحة والتصميم
+# =========================================================
 st.set_page_config(
-    page_title="الجنيه أولاً | مركز تحليل وإنقاذ الاقتصاد السوداني",
+    page_title="الجنيه أولاً | مركز الاقتصاد السوداني",
     page_icon="🇸🇩",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-
-html, body, [class*="css"] {
-    direction: rtl;
-    text-align: right;
-    font-family: 'Cairo', sans-serif !important;
+html, body, [class*="css"] { font-family: 'Cairo', sans-serif; }
+.stApp { background: #f3f6fa; }
+section[data-testid="stSidebar"] { background: #102b46; }
+section[data-testid="stSidebar"] * { color: #ffffff !important; }
+.hero {
+    background: linear-gradient(120deg,#102b46,#087f8c);
+    color: white; padding: 28px 30px; border-radius: 18px;
+    margin-bottom: 18px; direction: rtl;
 }
-
-.block-container { padding-top: 1.5rem; }
-
-[data-testid="stSidebar"] {
-    direction: rtl !important;
-    text-align: right !important;
+.hero h1 { font-size: 30px; margin: 0 0 8px 0; }
+.hero p { font-size: 15px; margin: 0; opacity: .95; }
+.section-title {
+    color:#102b46; font-size:23px; font-weight:800;
+    border-right:5px solid #0b9b91; padding-right:12px;
+    margin: 8px 0 18px 0; direction:rtl;
 }
-
-[data-testid="stSidebar"] div, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
-    direction: rtl !important;
-    text-align: right !important;
+.info-box {
+    background:#e8f4f5; border-right:5px solid #0b9b91;
+    padding:14px 16px; border-radius:10px; direction:rtl;
 }
-
-/* بطاقات المؤشرات */
-[data-testid="stMetric"] {
-    background: #f8fafc;
-    padding: 16px;
-    border-radius: 12px;
-    border-right: 5px solid #123b5d;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-}
-
-.diagnosis-box {
-    background: #eef6fa;
-    border-right: 5px solid #13a6a6;
-    padding: 16px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-}
-
 .warning-box {
-    background: #fff8eb;
-    border-right: 5px solid #d97706;
-    padding: 14px;
-    border-radius: 8px;
-    margin-top: 10px;
+    background:#fff4df; border-right:5px solid #e5a000;
+    padding:14px 16px; border-radius:10px; direction:rtl;
 }
-
-.policy-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-right: 6px solid #123b5d;
-    padding: 18px;
-    border-radius: 10px;
-    margin-bottom: 15px;
+.danger-box {
+    background:#ffeded; border-right:5px solid #d9534f;
+    padding:14px 16px; border-radius:10px; direction:rtl;
 }
+.metric-card {
+    background:white; border:1px solid #e5eaf0; border-radius:14px;
+    padding:14px 16px; box-shadow:0 2px 8px rgba(20,40,60,.04);
+    direction:rtl; min-height:105px;
+}
+.metric-label { color:#667788; font-size:13px; }
+.metric-value { color:#102b46; font-size:25px; font-weight:800; }
+.metric-note { color:#82909d; font-size:11px; }
+.small-note {color:#657789;font-size:12px;direction:rtl;}
+div.stButton > button {
+    border-radius:10px; border:0; background:#087f8c;
+    color:white; font-weight:700; min-height:42px;
+}
+div.stButton > button:hover { background:#075e68; color:white; }
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 2. محرك البيانات والتحقق (Data & Validation Engine)
-# ==========================================
+# =========================================================
+# 2) تعريف البيانات والأعمدة
+# =========================================================
 REQUIRED_COLUMNS = [
-    "year", "data_type", "primary_source",
-    "exports_usd_m", "imports_usd_m", "gold_exports_usd_m",
-    "agri_exports_usd_m", "essential_imports_usd_m", "inflation_pct",
-    "official_fx_sdg", "parallel_fx_sdg", "money_supply_m2_sdg_b",
-    "fiscal_deficit_pct_gdp", "notes"
+    "year", "exports_usd_m", "imports_usd_m",
+    "gold_exports_usd_m", "agri_exports_usd_m",
+    "essential_imports_usd_m", "inflation_pct",
+    "official_fx_sdg", "parallel_fx_sdg",
+    "m2_sdg_bn", "fiscal_deficit_sdg_bn",
 ]
 
-AR_LABELS = {
+COLUMN_LABELS = {
     "year": "السنة",
-    "data_type": "نوع البيانات",
-    "primary_source": "المصدر الرئيسي",
-    "exports_usd_m": "الصادرات (مليون $)",
-    "imports_usd_m": "الواردات (مليون $)",
-    "gold_exports_usd_m": "صادرات الذهب (مليون $)",
-    "agri_exports_usd_m": "الصادرات الزراعية (مليون $)",
-    "essential_imports_usd_m": "الواردات الأساسية (مليون $)",
+    "exports_usd_m": "إجمالي الصادرات (مليون دولار)",
+    "imports_usd_m": "إجمالي الواردات (مليون دولار)",
+    "gold_exports_usd_m": "صادرات الذهب (مليون دولار)",
+    "agri_exports_usd_m": "الصادرات الزراعية والحيوانية (مليون دولار)",
+    "essential_imports_usd_m": "الواردات الأساسية (مليون دولار)",
     "inflation_pct": "التضخم السنوي (%)",
-    "official_fx_sdg": "السعر الرسمي (جنيه/$)",
-    "parallel_fx_sdg": "سعر السوق الموازي (جنيه/$)",
-    "money_supply_m2_sdg_b": "عرض النقود M2 (مليار جنيه)",
-    "fiscal_deficit_pct_gdp": "العجز المالي (% من الناتج)",
-    "notes": "ملاحظات وتوثيق"
+    "official_fx_sdg": "سعر الصرف الرسمي (جنيه/دولار)",
+    "parallel_fx_sdg": "سعر الصرف الموازي (جنيه/دولار)",
+    "m2_sdg_bn": "عرض النقود M2 (مليار جنيه)",
+    "fiscal_deficit_sdg_bn": "العجز المالي (مليار جنيه)",
 }
 
-def load_verified_baseline() -> pd.DataFrame:
-    data = [
-        [2018, "رسمي", "بنك السودان المركزي (CBoS)", 3485.0, 7350.0, 1250.0, 1450.0, 3100.0, 63.3, 47.5, 65.0, 360.0, -7.9, "التقرير السنوي لبنك السودان المركزي"],
-        [2019, "رسمي", "بنك السودان المركزي (CBoS)", 3740.0, 8100.0, 1300.0, 1600.0, 3400.0, 51.0, 45.0, 82.0, 580.0, -10.8, "التقرير السنوي لبنك السودان المركزي"],
-        [2020, "رسمي", "بنك السودان المركزي (CBoS)", 3800.0, 7950.0, 1420.0, 1580.0, 3500.0, 163.3, 55.0, 260.0, 1150.0, -5.9, "تأثيرات جائحة كورونا واتساع الفجوة النقدية"],
-        [2021, "رسمي", "بنك السودان المركزي وصندوق النقد الدولي", 4280.0, 8400.0, 1850.0, 1650.0, 3800.0, 359.1, 440.0, 455.0, 2450.0, -0.3, "سياسة توحيد سعر الصرف (فبراير 2021)"],
-        [2022, "رسمي", "بنك السودان المركزي (CBoS)", 4357.0, 8900.0, 2020.0, 1590.0, 4100.0, 138.8, 570.0, 585.0, 3800.0, -1.7, "آخر بيانات سنوية مكتملة قبل اندلاع الحرب"],
-        [2023, "تقديري دولي", "صندوق النقد الدولي (IMF) و UN Comtrade", 2150.0, 5200.0, 1150.0, 720.0, 2900.0, 171.5, 850.0, 1050.0, 5900.0, -4.5, "تقديرات دولية لتعطل الإحصاءات الرسمية جراء الحرب"],
-        [2024, "تقديري دولي", "البنك الدولي وصندوق النقد الدولي (تقديرات)", 1816.0, 4517.0, 1050.0, 540.0, 2750.0, 210.0, 1950.0, 2500.0, 9200.0, -5.2, "تقديرات أولية قابلة للمراجعة مع استمرار النزاع"],
+# أرقام توضيحية مصطنعة لبناء التطبيق واختبار وظائفه فقط.
+# لا يجوز تقديمها على أنها بيانات السودان الرسمية.
+def load_illustrative_baseline():
+    rows = [
+        [2018, 4200, 9000, 1500, 1100, 6500, 63, 47, 55, 9000, 1200],
+        [2019, 4100, 8200, 1450, 1050, 6000, 51, 45, 85, 11500, 1500],
+        [2020, 3900, 7600, 1300, 1000, 5600, 163, 55, 120, 14500, 2100],
+        [2021, 4600, 8800, 1700, 1200, 6400, 359, 440, 520, 19000, 3200],
+        [2022, 5200, 9600, 1900, 1450, 6900, 138, 570, 580, 25000, 4100],
+        [2023, 4300, 7900, 1550, 1250, 5900, 66, 600, 950, 31000, 5200],
+        [2024, 3600, 6900, 1250, 1050, 5200, 150, 1100, 2200, 39000, 6800],
     ]
-    return pd.DataFrame(data, columns=REQUIRED_COLUMNS)
+    df = pd.DataFrame(rows, columns=REQUIRED_COLUMNS)
+    df["data_type"] = "بيانات توضيحية"
+    df["primary_source"] = "لا يوجد — أرقام افتراضية لاختبار التطبيق"
+    df["source_url"] = ""
+    df["updated_at"] = "غير متاح"
+    df["notes"] = "بيانات توضيحية مصطنعة وليست بيانات رسمية."
+    return df
 
-def validate_economic_data(df: pd.DataFrame):
-    errors = []
-    missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
-    if missing_cols:
-        return False, [f"❌ الأعمدة التالية مفقودة: {', '.join(missing_cols)}"], df
-    
-    clean_df = df.copy()
-    numeric_cols = [c for c in REQUIRED_COLUMNS if c not in ["year", "data_type", "primary_source", "notes"]]
-    
-    for col in numeric_cols:
-        clean_df[col] = pd.to_numeric(clean_df[col], errors="coerce")
-        if clean_df[col].isna().any():
-            errors.append(f"❌ العمود '{col}' يحتوي على قيم غير رقمية أو فارغة.")
-            
-    if errors:
-        return False, errors, clean_df
-        
-    if clean_df["year"].duplicated().any():
-        errors.append("❌ توجد سنوات مكررة في البيانات.")
-        
-    if (clean_df["imports_usd_m"] <= 0).any():
-        errors.append("❌ إجمالي الواردات يجب أن يكون أكبر من الصفر.")
-        
-    return len(errors) == 0, errors, clean_df.sort_values("year").reset_index(drop=True)
+# =========================================================
+# 3) فحص البيانات وتنظيفها
+# =========================================================
+def validate_economic_data(raw_df):
+    df = raw_df.copy()
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError("الأعمدة الناقصة: " + "، ".join(missing))
 
-def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    for col in REQUIRED_COLUMNS:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if df[REQUIRED_COLUMNS].isna().any().any():
+        bad = df[REQUIRED_COLUMNS].columns[df[REQUIRED_COLUMNS].isna().any()].tolist()
+        raise ValueError("توجد خلايا فارغة أو غير رقمية في: " + "، ".join(bad))
+
+    if not np.all(np.equal(np.mod(df["year"], 1), 0)):
+        raise ValueError("يجب أن تكون السنة أعداداً صحيحة.")
+    df["year"] = df["year"].astype(int)
+
+    if df["year"].duplicated().any():
+        dup = df.loc[df["year"].duplicated(), "year"].tolist()
+        raise ValueError(f"هناك سنوات مكررة: {dup}")
+
+    nonnegative = [
+        "exports_usd_m", "imports_usd_m", "gold_exports_usd_m",
+        "agri_exports_usd_m", "essential_imports_usd_m",
+        "inflation_pct", "m2_sdg_bn",
+    ]
+    for col in nonnegative:
+        if (df[col] < 0).any():
+            raise ValueError(f"لا يُسمح بقيم سالبة في {COLUMN_LABELS[col]}.")
+
+    for col in ["official_fx_sdg", "parallel_fx_sdg"]:
+        if (df[col] <= 0).any():
+            raise ValueError(f"{COLUMN_LABELS[col]} يجب أن تكون أكبر من صفر.")
+
+    if (df["imports_usd_m"] <= 0).any():
+        raise ValueError("إجمالي الواردات يجب أن يكون أكبر من صفر.")
+    if (df["essential_imports_usd_m"] > df["imports_usd_m"]).any():
+        raise ValueError("الواردات الأساسية لا يمكن أن تتجاوز إجمالي الواردات.")
+    if ((df["gold_exports_usd_m"] + df["agri_exports_usd_m"]) > df["exports_usd_m"]).any():
+        raise ValueError("مجموع صادرات الذهب والزراعة يتجاوز إجمالي الصادرات.")
+
+    return df.sort_values("year").reset_index(drop=True)
+
+def compute_indicators(df):
     res = df.copy()
     res["trade_balance_usd_m"] = res["exports_usd_m"] - res["imports_usd_m"]
-    res["trade_status"] = np.where(
-        res["trade_balance_usd_m"] < 0, "عجز تجاري",
-        np.where(res["trade_balance_usd_m"] > 0, "فائض تجاري", "توازن تجاري")
+    res["import_coverage_pct"] = (res["exports_usd_m"] / res["imports_usd_m"]) * 100
+    res["gold_share_pct"] = (res["gold_exports_usd_m"] / res["exports_usd_m"].replace(0, np.nan)) * 100
+    res["agri_share_pct"] = (res["agri_exports_usd_m"] / res["exports_usd_m"].replace(0, np.nan)) * 100
+    res["other_exports_usd_m"] = (
+        res["exports_usd_m"] - res["gold_exports_usd_m"] - res["agri_exports_usd_m"]
     )
-    res["coverage_ratio_pct"] = (res["exports_usd_m"] / res["imports_usd_m"]) * 100
-    res["gold_share_pct"] = np.where(res["exports_usd_m"] > 0, (res["gold_exports_usd_m"] / res["exports_usd_m"]) * 100, 0)
-    res["agri_share_pct"] = np.where(res["exports_usd_m"] > 0, (res["agri_exports_usd_m"] / res["exports_usd_m"]) * 100, 0)
-    res["non_essential_imports_usd_m"] = res["imports_usd_m"] - res["essential_imports_usd_m"]
-    
-    res["fx_gap_sdg"] = res["parallel_fx_sdg"] - res["official_fx_sdg"]
-    res["fx_gap_pct"] = ((res["parallel_fx_sdg"] - res["official_fx_sdg"]) / res["official_fx_sdg"]) * 100
-    res["m2_growth_pct"] = res["money_supply_m2_sdg_b"].pct_change() * 100
+    res["essential_import_share_pct"] = (
+        res["essential_imports_usd_m"] / res["imports_usd_m"]
+    ) * 100
+    res["nonessential_imports_usd_m"] = (
+        res["imports_usd_m"] - res["essential_imports_usd_m"]
+    )
+    res["fx_gap_pct"] = (
+        (res["parallel_fx_sdg"] - res["official_fx_sdg"])
+        / res["official_fx_sdg"]
+    ) * 100
+    res["m2_growth_pct"] = res["m2_sdg_bn"].pct_change() * 100
+    res["exports_growth_pct"] = res["exports_usd_m"].pct_change() * 100
+    res["imports_growth_pct"] = res["imports_usd_m"].pct_change() * 100
 
-    # مؤشر الاستقرار المركب (0 إلى 100)
-    c_score = np.minimum(res["coverage_ratio_pct"], 100) * 0.30
-    i_score = np.maximum(0, (100 - np.minimum(res["inflation_pct"], 100))) * 0.30
-    d_score = np.maximum(0, (100 - res["gold_share_pct"])) * 0.20
-    fx_score = np.maximum(0, (100 - np.minimum(res["fx_gap_pct"], 100))) * 0.20
-    res["project_stability_index"] = (c_score + i_score + d_score + fx_score).round(1)
-    
+    # مؤشر داخلي تجريبي للتوضيح فقط، وليس مؤشراً اقتصادياً معتمداً.
+    # تُقيد المكونات بين صفر و100 لتجنب تضخم المؤشر.
+    fx_component = 100 - res["fx_gap_pct"].clip(0, 300) / 3
+    coverage_component = res["import_coverage_pct"].clip(0, 100)
+    diversification_component = (
+        100 - res["gold_share_pct"].clip(0, 100)
+    )
+    inflation_component = 100 - res["inflation_pct"].clip(0, 300) / 3
+    res["project_stability_index"] = (
+        0.30 * fx_component.clip(0, 100)
+        + 0.30 * coverage_component.clip(0, 100)
+        + 0.20 * diversification_component.clip(0, 100)
+        + 0.20 * inflation_component.clip(0, 100)
+    )
     return res
 
-# ==========================================
-# 3. الشريط الجانبي وإدارة البيانات
-# ==========================================
-with st.sidebar:
-    st.markdown("## 🇸🇩 الجنيه أولاً")
-    st.caption("مركز ذكاء اقتصادي ودعم قرار مبني على الأدلة")
-    st.divider()
-    
-    page = st.radio(
-        "أقسام المركز:",
-        [
-            "🏠 مركز القيادة (ملخص الحالة)",
-            "💵 الجنيه وسعر الصرف",
-            "🪙 الذهب والمعادن",
-            "🌾 الإنتاج والثروة",
-            "🚢 التجارة الخارجية والميزان",
-            "📉 التضخم والقوة الشرائية",
-            "🏦 السياسة النقدية والمالية",
-            "🧪 مختبر إنقاذ الجنيه",
-            "🤖 المستشار الاقتصادي",
-            "📚 مركز البيانات والمصادر"
-        ]
+# =========================================================
+# 4) تحميل البيانات من الملف أو الافتراضية
+# =========================================================
+st.sidebar.markdown("## 🇸🇩 الجنيه أولاً")
+st.sidebar.caption("مركز تحليل الاقتصاد السوداني")
+uploaded = st.sidebar.file_uploader("ارفع ملف البيانات CSV", type=["csv"])
+
+if uploaded is not None:
+    try:
+        raw = pd.read_csv(uploaded)
+        data = compute_indicators(validate_economic_data(raw))
+        data_origin = "ملف CSV مرفوع"
+        st.sidebar.success("تم تحميل البيانات وفحصها بنجاح.")
+    except Exception as exc:
+        data = compute_indicators(validate_economic_data(load_illustrative_baseline()))
+        data_origin = "البيانات التوضيحية — فشل تحميل الملف"
+        st.sidebar.error(f"تعذر استخدام الملف: {exc}")
+else:
+    data = compute_indicators(validate_economic_data(load_illustrative_baseline()))
+    data_origin = "بيانات توضيحية مصطنعة"
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### تنبيه البيانات")
+st.sidebar.caption("البيانات الافتراضية للتجربة فقط. ارفع CSV موثقاً لتحليل الأرقام الفعلية.")
+pages = [
+    "مركز القيادة",
+    "الجنيه وسعر الصرف",
+    "الذهب والمعادن",
+    "الإنتاج والتنويع",
+    "التجارة الخارجية",
+    "التضخم والقوة الشرائية",
+    "السياسة النقدية والمالية",
+    "مختبر إنقاذ الجنيه",
+    "المستشار الاقتصادي",
+    "البيانات والمصادر",
+]
+page = st.sidebar.radio("انتقل إلى القسم", pages)
+st.sidebar.markdown("---")
+st.sidebar.caption("نسخة تحليلية تعليمية — ليست بديلاً عن التقارير الرسمية.")
+
+latest = data.iloc[-1]
+previous = data.iloc[-2] if len(data) > 1 else latest
+year_latest = int(latest["year"])
+
+# =========================================================
+# 5) أدوات عرض عامة
+# =========================================================
+def metric_card(label, value, note=""):
+    st.markdown(
+        f"""<div class="metric-card">
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{value}</div>
+        <div class="metric-note">{note}</div>
+        </div>""",
+        unsafe_allow_html=True,
     )
-    
-    st.divider()
-    st.subheader("⚙️ استيراد البيانات الموثقة")
-    uploaded_file = st.file_uploader("رفع ملف CSV للإحصاءات الاقتصادية", type=["csv"])
-    
-    if uploaded_file:
-        try:
-            raw_df = pd.read_csv(uploaded_file)
-            is_valid, errs, clean_df = validate_economic_data(raw_df)
-            if is_valid:
-                df = compute_indicators(clean_df)
-                data_status = "بيانات مخصصة مرفوعة من المستخدم (متحقق منها)"
-            else:
-                st.error("أخطاء في التحقق من الملف المرفوع:")
-                for e in errs:
-                    st.error(e)
-                st.info("تم الرجوع تلقائياً إلى قاعدة البيانات الأساسية الموثقة.")
-                raw_df = load_verified_baseline()
-                df = compute_indicators(raw_df)
-                data_status = "قاعدة البيانات الموثقة الأساسية (افتراضي)"
-        except Exception as e:
-            st.error(f"خطأ في قراءة الملف: {e}")
-            raw_df = load_verified_baseline()
-            df = compute_indicators(raw_df)
-            data_status = "قاعدة البيانات الموثقة الأساسية (افتراضي)"
-    else:
-        raw_df = load_verified_baseline()
-        df = compute_indicators(raw_df)
-        data_status = "قاعدة البيانات الموثقة الأساسية (CBoS & IMF)"
 
-latest = df.iloc[-1]
-prev = df.iloc[-2] if len(df) > 1 else latest
+def section(title):
+    st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
 
-# ==========================================
-# 4. محتوى الأقسام العشرة المتكاملة
-# ==========================================
+def fmt_num(value, digits=1):
+    if pd.isna(value):
+        return "غير متاح"
+    return f"{value:,.{digits}f}"
 
-if page == "🏠 مركز القيادة (ملخص الحالة)":
-    st.title("🇸🇩 الجنيه أولاً — مركز القيادة الاقتصادي")
-    st.caption(f"حالة البيانات: **{data_status}** | سنة القياس الحالية: **{int(latest['year'])}**")
-    
-    stab_idx = latest["project_stability_index"]
-    if stab_idx < 35:
-        status_color_label = "🔴 وضع حرج للغاية (اختلال هيكلي حاد)"
-    elif stab_idx < 65:
-        status_color_label = "🟡 وضع هش (يتطلب تدخلاً عاجلاً)"
-    else:
-        status_color_label = "🟢 وضع مستقر نسبياً"
+def source_warning():
+    if "توضيحية" in data_origin:
+        st.markdown(
+            '<div class="warning-box"><b>تنبيه مهم:</b> النتائج الحالية مبنية على بيانات توضيحية مصطنعة، '
+            'ولا تمثل وصفاً موثقاً للاقتصاد السوداني. ارفع بيانات موثقة قبل الاستنتاج أو الاقتباس.</div>',
+            unsafe_allow_html=True,
+        )
 
-    st.markdown(f"""
-    <div class="diagnosis-box">
-        <h4>🩺 التشخيص التنفيذي الشامل ({int(latest['year'])})</h4>
-        <p><b>مؤشر الاستقرار المركب:</b> {status_color_label} (<b>{stab_idx} / 100</b> نقطة)</p>
-        <p>يسجل الميزان التجاري <b>{abs(latest['trade_balance_usd_m']):,.1f} مليون دولار</b> كـ<b>{latest['trade_status']}</b>، 
-        حيث لا تغطي الصادرات سوى <b>{latest['coverage_ratio_pct']:.1f}%</b> من فاتورة الواردات. 
-        كما يستحوذ <b>الذهب على {latest['gold_share_pct']:.1f}%</b> من حصيلة الصادرات، مما يضع العملة الوطنية تحت رحمة تقلبات مورد واحد وضعف الإنتاج الحقيقي.</p>
-    </div>
-    """, unsafe_allow_html=True)
+def chart_line(df, x, y, title, labels=None):
+    fig = px.line(df, x=x, y=y, markers=True, title=title, labels=labels)
+    fig.update_layout(template="plotly_white", title_x=0.98, hovermode="x unified")
+    st.plotly_chart(fig, use_container_width=True)
 
+def chart_bar(df, x, y, title, labels=None):
+    fig = px.bar(df, x=x, y=y, title=title, labels=labels, text_auto=".2s")
+    fig.update_layout(template="plotly_white", title_x=0.98)
+    st.plotly_chart(fig, use_container_width=True)
+
+# =========================================================
+# 6) واجهة الأقسام
+# =========================================================
+st.markdown("""
+<div class="hero">
+    <h1>🇸🇩 الجنيه أولاً</h1>
+    <p>مركز تحليل وإنقاذ الاقتصاد السوداني — من قراءة المؤشرات إلى اختبار الحلول والسياسات.</p>
+</div>
+""", unsafe_allow_html=True)
+
+source_warning()
+st.caption(f"مصدر البيانات الحالي: {data_origin} | آخر سنة في البيانات: {year_latest}")
+
+if page == "مركز القيادة":
+    section("لوحة القيادة الاقتصادية")
+    st.write("ملخص سريع لأهم المؤشرات المتاحة في مجموعة البيانات الحالية.")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("إجمالي الصادرات", f"{latest['exports_usd_m']:,.1f} م$", f"{latest['exports_usd_m'] - prev['exports_usd_m']:,.1f} م$")
-    c2.metric("إجمالي الواردات", f"{latest['imports_usd_m']:,.1f} م$", f"{latest['imports_usd_m'] - prev['imports_usd_m']:,.1f} م$", delta_color="inverse")
-    c3.metric("معدل التضخم السنوي", f"{latest['inflation_pct']:.1f}%", f"{latest['inflation_pct'] - prev['inflation_pct']:+.1f}%", delta_color="inverse")
-    c4.metric("فجوة سعر الصرف", f"{latest['fx_gap_pct']:.1f}%", f"السوق الموازي: {latest['parallel_fx_sdg']} جنيه", delta_color="inverse")
+    with c1:
+        metric_card("إجمالي الصادرات", f"{fmt_num(latest['exports_usd_m'])} مليون $", f"سنة {year_latest}")
+    with c2:
+        metric_card("إجمالي الواردات", f"{fmt_num(latest['imports_usd_m'])} مليون $", f"سنة {year_latest}")
+    with c3:
+        metric_card("التضخم", f"{fmt_num(latest['inflation_pct'])}%", "المعدل السنوي")
+    with c4:
+        metric_card("فجوة سعر الصرف", f"{fmt_num(latest['fx_gap_pct'])}%", "الموازي مقارنة بالرسمي")
 
-    st.subheader("📊 تطور الفجوة بين الصادرات والواردات عبر السنوات")
-    fig_main = go.Figure()
-    fig_main.add_trace(go.Bar(x=df["year"], y=df["exports_usd_m"], name="إجمالي الصادرات", marker_color="#13a6a6"))
-    fig_main.add_trace(go.Bar(x=df["year"], y=df["imports_usd_m"], name="إجمالي الواردات", marker_color="#123b5d"))
-    fig_main.update_layout(barmode="group", xaxis_title="السنة", yaxis_title="مليون دولار أمريكي", hovermode="x unified")
-    st.plotly_chart(fig_main, use_container_width=True)
+    c5, c6, c7, c8 = st.columns(4)
+    with c5:
+        metric_card("الميزان التجاري", f"{fmt_num(latest['trade_balance_usd_m'])} مليون $", "الصادرات ناقص الواردات")
+    with c6:
+        metric_card("تغطية الواردات", f"{fmt_num(latest['import_coverage_pct'])}%", "الصادرات ÷ الواردات")
+    with c7:
+        metric_card("حصة الذهب", f"{fmt_num(latest['gold_share_pct'])}%", "من إجمالي الصادرات")
+    with c8:
+        metric_card("مؤشر المشروع", f"{fmt_num(latest['project_stability_index'])}/100", "مؤشر تجريبي غير معتمد")
 
-elif page == "💵 الجنيه وسعر الصرف":
-    st.title("💵 انهيار العملة وسعر الصرف: التشخيص والامتدادات")
-    st.write("تحليل الفجوة بين السعر الرسمي المعلن وسعر السوق الموازي وأثرهما على التوازن النقدي.")
-    
+    section("صورة الاقتصاد عبر الزمن")
     col1, col2 = st.columns(2)
     with col1:
-        fig_fx = px.line(df, x="year", y=["official_fx_sdg", "parallel_fx_sdg"], markers=True,
-                         title="مسار سعر الصرف (الجنيه مقابل الدولار)",
-                         color_discrete_sequence=["#13a6a6", "#e11d48"])
-        st.plotly_chart(fig_fx, use_container_width=True)
+        chart_line(data, "year", ["exports_usd_m", "imports_usd_m"], "الصادرات والواردات (مليون دولار)")
     with col2:
-        fig_gap = px.bar(df, x="year", y="fx_gap_pct", title="نسبة الفجوة بين السوق الموازي والسعر الرسمي (%)",
-                         color_discrete_sequence=["#d97706"])
-        st.plotly_chart(fig_gap, use_container_width=True)
-
-    st.markdown(f"""
-    <div class="policy-card">
-        <h4>💡 رؤية تحليلية حول سعر الصرف في {int(latest['year'])}</h4>
-        <p>تصل الفجوة النقدية في السوق الموازي إلى <b>{latest['fx_gap_pct']:.1f}%</b> بسعر صرف يبلغ <b>{latest['parallel_fx_sdg']} جنيه للدولار</b> مقارنة بالسعر الرسمي <b>{latest['official_fx_sdg']} جنيه</b>. 
-        هذا الاتساع يعكس فقدان الثقة في قنوات الجهاز المصرفي ولجوء التجار والمستوردين للأسواق الموازية لتغطية التزاماتهم.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-elif page == "🪙 الذهب والمعادن":
-    st.title("🪙 تحليل قطاع الذهب: المورد المهيمن والمخاطر الهيكلية")
-    
-    c1, c2 = st.columns(2)
-    c1.metric("صادرات الذهب الحالية", f"{latest['gold_exports_usd_m']:,.1f} مليون $", f"يمثل {latest['gold_share_pct']:.1f}% من الصادرات")
-    c2.metric("حصة الصادرات الكلية", f"{latest['exports_usd_m']:,.1f} مليون $")
-
-    fig_gold = px.area(df, x="year", y="gold_share_pct", title="تطور نسبة مساهمة الذهب في إجمالي حصيلة الصادرات (%)",
-                       color_discrete_sequence=["#d97706"])
-    st.plotly_chart(fig_gold, use_container_width=True)
-
-    st.markdown("""
-    <div class="warning-box">
-        <h4>⚠️ مأزق الاقتصاد الأحادي</h4>
-        <p>الاعتماد المفرط على الذهب يجعل الخزينة العامة والجنيه السوداني عرضة لتقلبات الأسواق العالمية وأنشطة التهريب غير الرسمية، مما يتطلب سياسات صارمة لتنظيم الإنتاج وربطه بالنظام المصرفي الرسمي.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-elif page == "🌾 الإنتاج والثروة":
-    st.title("🌾 الإنتاج المحلي: الزراعة، الثروة الحيوانية، والصناعة")
-    
-    fig_agri = px.line(df, x="year", y=["agri_exports_usd_m", "gold_exports_usd_m"], markers=True,
-                       title="مقارنة عائدات القطاع الزراعي والحيواني مقابل الذهب (مليون $)",
-                       color_discrete_sequence=["#13a6a6", "#d97706"])
-    st.plotly_chart(fig_agri, use_container_width=True)
-
-    st.markdown(f"""
-    <div class="policy-card">
-        <h4>🌱 استراتيجية الإحلال والتنويع</h4>
-        <p>بلغت الصادرات الزراعية والحيوانية <b>{latest['agri_exports_usd_m']:,.1f} مليون دولار</b> في سنة {int(latest['year'])، ورغم ضخامة الإمكانات الطبيعية للسودان، 
-        إلا أن غياب التصنيع المحلي وتصدير المواد في صورة خام يحرم البلاد من قيمة مضافة حقيقية كانت قادرة على دعم الجنيه بصورة مستدامة.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-elif page == "🚢 التجارة الخارجية والميزان":
-    st.title("🚢 التجارة الخارجية وفاتورة الواردات")
-    
-    selected_yr = st.selectbox("اختر السنة لاستعراض هيكل التجارة:", df["year"].astype(int).tolist(), index=len(df)-1)
-    yr_row = df[df["year"] == selected_yr].iloc[0]
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("إجمالي الصادرات", f"{yr_row['exports_usd_m']:,.1f} م$")
-    c2.metric("إجمالي الواردات", f"{yr_row['imports_usd_m']:,.1f} م$")
-    c3.metric("حالة الميزان التجاري", f"{yr_row['trade_balance_usd_m']:,.1f} م$", yr_row['trade_status'])
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        fig_imp_comp = px.pie(
-            names=["الواردات الأساسية (قمح، دواء، وقود)", "الواردات غير الأساسية / القابلة للإحلال"],
-            values=[yr_row["essential_imports_usd_m"], yr_row["non_essential_imports_usd_m"]],
-            title=f"هيكل الواردات في سنة {selected_yr}",
-            color_discrete_sequence=["#123b5d", "#e11d48"]
-        )
-        st.plotly_chart(fig_imp_comp, use_container_width=True)
-    with col_b:
-        fig_exp_comp = px.pie(
-            names=["صادرات الذهب", "الصادرات الزراعية والحيوانية", "صادرات أخرى"],
-            values=[yr_row["gold_exports_usd_m"], yr_row["agri_exports_usd_m"], yr_row["other_exports_usd_m"]],
-            title=f"هيكل الصادرات في سنة {selected_yr}",
-            color_discrete_sequence=["#d97706", "#13a6a6", "#123b5d"]
-        )
-        st.plotly_chart(fig_exp_comp, use_container_width=True)
-
-elif page == "📉 التضخم والقوة الشرائية":
-    st.title("📉 التضخم وتآكل القوة الشرائية للعملة")
-    
-    fig_inf = px.line(df, x="year", y="inflation_pct", markers=True, title="مسار معدل التضخم السنوي (%)",
-                      color_discrete_sequence=["#e11d48"])
-    st.plotly_chart(fig_inf, use_container_width=True)
-
-    st.subheader("🧮 حاسبة القوة الشرائية وتآكل الجنيه المصححة")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        calc_amount = st.number_input("أدخلي المبلغ بالجنيه السوداني:", min_value=1000, value=100000, step=5000)
-    with col2:
-        base_yr = st.selectbox("سنة الأساس للمقارنة:", df["year"].astype(int).tolist()[:-1], index=0)
+        chart_line(data, "year", "inflation_pct", "التضخم السنوي (%)")
+    col3, col4 = st.columns(2)
     with col3:
-        target_yr = st.selectbox("سنة المقارنة (النهاية):", df["year"].astype(int).tolist(), index=len(df)-1)
+        chart_line(data, "year", ["official_fx_sdg", "parallel_fx_sdg"], "سعر الصرف الرسمي والموازي")
+    with col4:
+        chart_line(data, "year", "project_stability_index", "مؤشر الاستقرار التجريبي")
 
-    if base_yr >= target_yr:
-        st.error("⚠️ سنة الأساس يجب أن تكون أقدم من سنة المقارنة.")
+    section("أبرز الإشارات")
+    signals = []
+    if latest["trade_balance_usd_m"] < 0:
+        signals.append("العجز التجاري: قيمة الواردات أعلى من الصادرات.")
     else:
-        sub_inf = df[(df["year"] > base_yr) & (df["year"] <= target_yr)]
-        factor = 1.0
-        for inf in sub_inf["inflation_pct"]:
-            factor *= (1.0 + (inf / 100.0))
-        
-        eq_today = calc_amount * factor
-        real_val = calc_amount / factor
-        loss = (1.0 - (1.0 / factor)) * 100
+        signals.append("فائض تجاري وفق البيانات المدخلة.")
+    if latest["gold_share_pct"] > 50:
+        signals.append("تركيز مرتفع للصادرات في الذهب؛ التنويع يستحق الدراسة.")
+    if latest["fx_gap_pct"] > 20:
+        signals.append("فجوة سعر الصرف كبيرة وفق الأرقام المدخلة.")
+    if latest["inflation_pct"] > 20:
+        signals.append("التضخم مرتفع ويضغط على القوة الشرائية.")
+    if latest["essential_import_share_pct"] > 80:
+        signals.append("معظم الواردات مصنفة كأساسية؛ مساحة خفضها محدودة.")
+    for s in signals:
+        st.markdown(f"- {s}")
 
-        st.markdown(f"""
-        <div class="policy-card">
-            <h4>📊 نتائج الحاسبة الاقتصادية بين {base_yr} و {target_yr}:</h4>
-            <ul>
-                <li><b>معامل التضخم التراكمي:</b> {factor:.2f}x</li>
-                <li><b>كم تحتاج اليوم ({target_yr}) لتشتري ما كان يشتريه المبلغ في {base_yr}؟</b> ما يقارب <b>{eq_today:,.0f} جنيه</b>.</li>
-                <li><b>القوة الشرائية الحقيقية للمبلغ اليوم مقومة بأسعار {base_yr}:</b> تساوي حوالي <b>{real_val:,.1f} جنيه</b> فقط.</li>
-                <li><b>نسبة تآكل القوة الشرائية:</b> <b>{loss:.1f}%</b>.</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+elif page == "الجنيه وسعر الصرف":
+    section("الجنيه السوداني وسعر الصرف")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("السعر الرسمي", f"{fmt_num(latest['official_fx_sdg'])} جنيه/$")
+    with c2:
+        metric_card("السعر الموازي", f"{fmt_num(latest['parallel_fx_sdg'])} جنيه/$")
+    with c3:
+        metric_card("الفجوة", f"{fmt_num(latest['fx_gap_pct'])}%")
+    chart_line(data, "year", ["official_fx_sdg", "parallel_fx_sdg"], "تطور سعر الصرف الرسمي والموازي")
+    section("كيف نقرأ فجوة الصرف؟")
+    st.markdown("""
+    <div class="info-box">
+    فجوة الصرف تقيس الفرق النسبي بين السعر الموازي والرسمي. ارتفاعها قد يرتبط بنقص المعروض من النقد الأجنبي،
+    أو قيود الوصول إليه، أو توقعات التضخم والمخاطر. لكنها وحدها لا تشرح كل أسباب تراجع العملة.
+    </div>""", unsafe_allow_html=True)
+    st.write(f"وفق آخر سنة مدخلة ({year_latest})، تبلغ الفجوة المحسوبة **{fmt_num(latest['fx_gap_pct'])}%**.")
+    st.write("لتحليل أعمق نحتاج أيضاً إلى بيانات احتياطيات النقد الأجنبي، التحويلات، تدفقات الصادرات، والطلب على الاستيراد.")
 
-elif page == "🏦 السياسة النقدية والمالية":
-    st.title("🏦 عرض النقود، التمويل بالعجز، والسياسة المالية")
-    
+elif page == "الذهب والمعادن":
+    section("الذهب والمعادن — من مورد طبيعي إلى حصيلة نقد أجنبي")
+    gold = data[["year", "gold_exports_usd_m", "exports_usd_m", "gold_share_pct"]].copy()
+    col1, col2 = st.columns(2)
+    with col1:
+        chart_bar(gold, "year", "gold_exports_usd_m", "قيمة صادرات الذهب (مليون دولار)")
+    with col2:
+        chart_line(gold, "year", "gold_share_pct", "حصة الذهب من إجمالي الصادرات (%)")
+    metric_card("حصة الذهب في آخر سنة", f"{fmt_num(latest['gold_share_pct'])}%", "من إجمالي الصادرات")
+    st.markdown("""
+    <div class="info-box">
+    السؤال الاقتصادي ليس فقط كم ينتج السودان من الذهب، بل كم من قيمته يصل إلى القنوات الرسمية؟
+    يتطلب ذلك بيانات الإنتاج، الصادرات الرسمية، التهريب التقديري، الأسعار العالمية، وتكاليف التعدين.
+    </div>""", unsafe_allow_html=True)
+    st.subheader("بيانات إضافية نحتاجها")
+    st.write("- إنتاج الذهب بالطن سنوياً.")
+    st.write("- الكمية المصدرة رسمياً وقيمتها.")
+    st.write("- تقديرات الفاقد والتهريب مع توضيح منهجية التقدير.")
+    st.write("- عدد العاملين ومساهمة التعدين في الإيرادات والوظائف.")
+
+elif page == "الإنتاج والتنويع":
+    section("الإنتاج والتنويع الاقتصادي")
+    prod = data[["year", "agri_exports_usd_m", "other_exports_usd_m", "gold_exports_usd_m"]].melt(
+        id_vars="year", var_name="sector", value_name="value"
+    )
+    names = {
+        "agri_exports_usd_m": "الزراعة والثروة الحيوانية",
+        "other_exports_usd_m": "صادرات أخرى",
+        "gold_exports_usd_m": "الذهب",
+    }
+    prod["sector"] = prod["sector"].map(names)
+    fig = px.bar(prod, x="year", y="value", color="sector", barmode="stack",
+                 title="تركيب الصادرات حسب المجموعات (مليون دولار)")
+    fig.update_layout(template="plotly_white", title_x=.98)
+    st.plotly_chart(fig, use_container_width=True)
     c1, c2 = st.columns(2)
     with c1:
-        fig_m2 = px.line(df, x="year", y="money_supply_m2_sdg_b", markers=True,
-                         title="تطور الكتلة النقدية M2 (مليار جنيه)", color_discrete_sequence=["#123b5d"])
-        st.plotly_chart(fig_m2, use_container_width=True)
+        metric_card("الصادرات الزراعية والحيوانية", f"{fmt_num(latest['agri_exports_usd_m'])} مليون $")
     with c2:
-        fig_def = px.bar(df, x="year", y="fiscal_deficit_pct_gdp",
-                         title="العجز المالي الحكومي (% من الناتج المحلي)", color_discrete_sequence=["#e11d48"])
-        st.plotly_chart(fig_def, use_container_width=True)
-
+        metric_card("الصادرات الأخرى", f"{fmt_num(latest['other_exports_usd_m'])} مليون $")
     st.markdown("""
-    <div class="policy-card">
-        <h4>📌 قراءة في السياسة النقدية</h4>
-        <p>التوسع في عرض النقود دون غطاء إنتاجي حقيقي، مدفوعاً بتمويل عجز الموازنة، يشكل المحرك الأساسي لتراجع القوة الشرائية للجنيه وارتفاع معدلات التضخم.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    <div class="info-box">
+    التنويع لا يعني زيادة الصادرات الزراعية فقط؛ بل رفع الإنتاجية، تحسين التخزين والنقل والكهرباء،
+    التصنيع المحلي، الجودة، والوصول للأسواق. لا يمكن تقدير أثر ذلك بدقة دون بيانات إنتاج وتكاليف وأسعار.
+    </div>""", unsafe_allow_html=True)
+    st.subheader("أسئلة يجب أن يجيب عنها التحليل")
+    st.write("- ما السلع التي يملك السودان فيها ميزة إنتاجية؟")
+    st.write("- ما العوائق التي تمنع وصول المنتج إلى السوق؟")
+    st.write("- ما نسبة الإنتاج التي تستهلك محلياً وما الذي يمكن تصديره دون الإضرار بالأمن الغذائي؟")
+    st.write("- ما أثر الكهرباء والطرق والتمويل والتخزين على تكلفة الإنتاج؟")
 
-elif page == "🧪 مختبر إنقاذ الجنيه":
-    st.title("🧪 مختبر إنقاذ الجنيه: محاكاة السياسات الاقتصادية المتعددة")
-    st.write("قومي بضبط المتغيرات أدناه لقياس الأثر المتوقع على الميزان التجاري، حصيلة النقد الأجنبي، وتغطية الواردات بناءً على أحدث سنة مسجلة.")
-
-    col1, col2, col3 = st.columns(3)
+elif page == "التجارة الخارجية":
+    section("التجارة الخارجية والميزان التجاري")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric_card("الميزان التجاري", f"{fmt_num(latest['trade_balance_usd_m'])} مليون $")
+    with c2:
+        metric_card("تغطية الواردات", f"{fmt_num(latest['import_coverage_pct'])}%")
+    with c3:
+        metric_card("الواردات الأساسية", f"{fmt_num(latest['essential_import_share_pct'])}% من الواردات")
+    col1, col2 = st.columns(2)
     with col1:
-        agri_boost = st.slider("نسبة زيادة الصادرات الزراعية بالتصنيع (%)", 0, 150, 30, 5)
+        chart_line(data, "year", "trade_balance_usd_m", "الميزان التجاري (مليون دولار)")
     with col2:
-        import_sub = st.slider("نسبة تخفيض الواردات غير الأساسية (%)", 0, 60, 20, 5)
-    with col3:
-        gold_formal = st.slider("نسبة استعادة عائدات الذهب المهرب (%)", 0, 100, 25, 5)
-
-    # الحسابات الافتراضية للسيناريو
-    new_agri = latest["agriculture_exports_usd_m"] * (1 + agri_boost / 100.0)
-    new_gold = latest["gold_exports_usd_m"] * (1 + gold_formal / 100.0)
-    sim_exports = new_agri + new_gold + latest["other_exports_usd_m"]
-    
-    sim_imports = latest["essential_imports_usd_m"] + (latest["non_essential_imports_usd_m"] * (1.0 - import_sub / 100.0))
-    sim_balance = sim_exports - sim_imports
-    sim_coverage = (sim_exports / sim_imports) * 100
-    net_gain = sim_balance - latest["trade_balance_usd_m"]
-
-    r1, r2, r3, r4 = st.columns(4)
-    r1.metric("الصادرات المتوقعة", f"{sim_exports:,.1f} م$", f"+{sim_exports - latest['exports_usd_m']:,.1f} م$")
-    r2.metric("الواردات المستهدفة", f"{sim_imports:,.1f} م$", f"{sim_imports - latest['imports_usd_m']:,.1f} م$", delta_color="inverse")
-    r3.metric("الميزان التجاري الجديد", f"{sim_balance:,.1f} م$", f"+{net_gain:,.1f} م$ تحسن")
-    r4.metric("تغطية الواردات الجديدة", f"{sim_coverage:.1f}%", f"{sim_coverage - latest['coverage_ratio_pct']:+.1f}%")
-
-    comp_sim_df = pd.DataFrame({
-        "الحالة": ["الوضع الحالي", "سيناريو الإصلاح المقترح"],
-        "الصادرات": [latest["exports_usd_m"], sim_exports],
-        "الواردات": [latest["imports_usd_m"], sim_imports]
+        chart_line(data, "year", "import_coverage_pct", "قدرة الصادرات على تغطية الواردات (%)")
+    mix = pd.DataFrame({
+        "الفئة": ["واردات أساسية", "واردات أخرى"],
+        "القيمة": [latest["essential_imports_usd_m"], latest["nonessential_imports_usd_m"]],
     })
-    fig_sim = px.bar(comp_sim_df, x="الحالة", y=["الصادرات", "الواردات"], barmode="group",
-                     title="مقارنة الميزان التجاري: الوضع القائم مقابل سيناريو السياسات",
-                     color_discrete_sequence=["#13a6a6", "#123b5d"])
-    st.plotly_chart(fig_sim, use_container_width=True)
-
-elif page == "🤖 المستشار الاقتصادي":
-    st.title("🤖 المستشار الاقتصادي: محرك التوصيات المبني على الأدلة")
-    
-    recommendations = []
-    if latest["gold_share_pct"] > 40:
-        recommendations.append({
-            "title": "فك الارتباط الأحادي بالذهب عبر التصنيع الزراعي",
-            "evidence": f"يمثل الذهب حالياً {latest['gold_share_pct']:.1f}% من إجمالي الصادرات.",
-            "why": "التركيز على مورد معدني غير مستقر يعرض العملة لصدمات حادة.",
-            "action": "توجيه الاستثمار نحو سلاسل القيمة المضافة للمنتجات الزراعية والحيوانية.",
-            "kpi": "رفع مساهمة الصادرات الزراعية لتتجاوز 35% خلال 3 أعوام."
-        })
-
-    if latest["coverage_ratio_pct"] < 60:
-        recommendations.append({
-            "title": "إدارة وترشيد فاتورة الواردات غير الأساسية",
-            "evidence": f"نسبة تغطية الصادرات للواردات منخفضة وتصل إلى {latest['coverage_ratio_pct']:.1f}% فقط.",
-            "why": "استنزاف النقد الأجنبي في سلع قابلة للإحلال المحلي يضغط على سعر الصرف.",
-            "action": "فرض رسوم حمائية وترشيد الاعتمادات المستندية للسلع الاستهلاكية غير الضرورية.",
-            "kpi": "خفض الواردات غير الأساسية بنسبة 25%."
-        })
-
-    for idx, rec in enumerate(recommendations, 1):
-        st.markdown(f"""
-        <div class="policy-card">
-            <h4>📌 التوصية #{idx}: {rec['title']}</h4>
-            <p><b>📊 الدليل الإحصائي:</b> {rec['evidence']}</p>
-            <p><b>🎯 المبرر الاقتصادي:</b> {rec['why']}</p>
-            <p><b>⚙️ آلية التنفيذ:</b> {rec['action']}</p>
-            <p><b>📈 مؤشر النجاح المستهدف (KPI):</b> {rec['kpi']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-elif page == "📚 مركز البيانات والمصادر":
-    st.title("📚 مركز البيانات والمصادر والشفافية المنهجية")
-    st.write("جدول البيانات الموثقة المستخدم في تشغيل كافة تحليلات ومؤشرات المركز:")
-    
-    display_df = df.rename(columns=AR_LABELS)
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
-    
+    fig = px.pie(mix, names="الفئة", values="القيمة", hole=.48, title=f"تركيب الواردات — {year_latest}")
+    fig.update_layout(title_x=.98)
+    st.plotly_chart(fig, use_container_width=True)
     st.markdown("""
-    <div class="policy-box">
-        <h4>📋 توثيق المنهجية</h4>
-        <p>تعتمد البيانات على تقارير بنك السودان المركزي (CBoS) للسنوات الرسمية، وتقديرات صندوق النقد الدولي (IMF WEO) والبنك الدولي لسنوات النزاع. جميع المعادلات الحسابية تخضع لجدار حماية دقيق لضمان سلامة مخرجات اتخاذ القرار.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    <div class="warning-box">
+    تقليل الواردات بصورة عشوائية قد يضر الغذاء والدواء ومدخلات الإنتاج. أي سياسة إحلال واردات يجب أن تفرق
+    بين السلع الضرورية والسلع التي يمكن إنتاج بديل محلي لها بكفاءة وجودة وسعر مناسب.
+    </div>""", unsafe_allow_html=True)
 
----
+elif page == "التضخم والقوة الشرائية":
+    section("التضخم والقوة الشرائية")
+    c1, c2 = st.columns(2)
+    with c1:
+        metric_card("التضخم في آخر سنة", f"{fmt_num(latest['inflation_pct'])}%")
+    with c2:
+        metric_card("تغير التضخم عن السنة السابقة", f"{fmt_num(latest['inflation_pct'] - previous['inflation_pct'])} نقطة مئوية")
+    chart_line(data, "year", "inflation_pct", "معدل التضخم السنوي (%)")
 
-### فيديو توضيحي حول التحليل الاقتصادي وإدارة الموازنات والميزان التجاري:
+    st.subheader("حاسبة القوة الشرائية")
+    years = data["year"].astype(int).tolist()
+    left, right = st.columns(2)
+    with left:
+        base_year = st.selectbox("سنة المبلغ الأصلي", years, index=0)
+    with right:
+        target_year = st.selectbox("السنة المراد المقارنة بها", years, index=len(years)-1)
+    amount = st.number_input("أدخل المبلغ بالجنيه", min_value=0.0, value=10000.0, step=500.0)
+    if base_year == target_year:
+        factor = 1.0
+    else:
+        low, high = sorted([base_year, target_year])
+        selected = data[(data["year"] > low) & (data["year"] <= high)]
+        factor = float(np.prod(1 + selected["inflation_pct"].to_numpy() / 100))
+    if target_year >= base_year:
+        equivalent = amount * factor
+        st.success(
+            f"المبلغ المكافئ في أسعار سنة {target_year} ≈ **{equivalent:,.2f} جنيه** "
+            f"للحفاظ على قوة شراء {amount:,.2f} جنيه في سنة {base_year}."
+        )
+    else:
+        real_value = amount / factor
+        st.success(
+            f"قيمة مبلغ {amount:,.2f} جنيه في سنة {target_year} بأسعار سنة {base_year} "
+            f"≈ **{real_value:,.2f} جنيه**."
+        )
+    st.caption("الحساب تقريبي ويستخدم معدلات التضخم السنوية المدخلة، ولا يعكس اختلاف تضخم السلع بين الأسر.")
 
-الصناعة المالية وإدارة هياكل الصادرات والواردات تتطلب متابعة مستمرة للأسواق والنماذج الاقتصادية. الفيديو أدناه يستعرض آليات قراءة وتحليل المؤشرات الكلية:
+elif page == "السياسة النقدية والمالية":
+    section("السياسة النقدية والمالية")
+    c1, c2 = st.columns(2)
+    with c1:
+        metric_card("عرض النقود M2", f"{fmt_num(latest['m2_sdg_bn'])} مليار جنيه")
+    with c2:
+        metric_card("العجز المالي", f"{fmt_num(latest['fiscal_deficit_sdg_bn'])} مليار جنيه")
+    col1, col2 = st.columns(2)
+    with col1:
+        chart_line(data, "year", "m2_sdg_bn", "عرض النقود M2 (مليار جنيه)")
+    with col2:
+        chart_line(data, "year", "fiscal_deficit_sdg_bn", "العجز المالي (مليار جنيه)")
+    if pd.notna(latest["m2_growth_pct"]):
+        st.write(f"نمو عرض النقود بين آخر سنتين: **{fmt_num(latest['m2_growth_pct'])}%**.")
+    st.markdown("""
+    <div class="info-box">
+    تحليل التضخم يحتاج ربط عرض النقود والإنفاق العام والإيرادات والإنتاج وسعر الصرف وتوقعات الجمهور.
+    لا يكفي النظر إلى متغير واحد لإثبات سبب التضخم.
+    </div>""", unsafe_allow_html=True)
+    st.caption("تأكد من تعريف العجز المالي في ملفك: هل القيمة عجز موجب أم رصيد مالي سالب؟ وثّق ذلك في عمود notes.")
 
-<Carousel>
-  <Video source="youtube" query="macroeconomic analysis trade balance and inflation" count="1"/>
-</Carousel>
+elif page == "مختبر إنقاذ الجنيه":
+    section("مختبر السياسات — جرّب سيناريوهات افتراضية")
+    st.markdown("""
+    <div class="warning-box">
+    هذه أداة حساب سيناريو مبسط، وليست نموذجاً اقتصادياً تنبؤياً. تفترض أن الزيادة المحددة تتحول مباشرة
+    إلى صادرات إضافية، ولا تحسب تغير الأسعار أو تكاليف الإنتاج أو ردود فعل السوق.
+    </div>""", unsafe_allow_html=True)
 
----
+    st.subheader("1) زيادة الصادرات")
+    a, b = st.columns(2)
+    with a:
+        agri_increase = st.slider("زيادة الصادرات الزراعية والحيوانية (%)", 0, 100, 20, 5)
+    with b:
+        gold_increase = st.slider("زيادة حصيلة صادرات الذهب الرسمية (%)", 0, 100, 10, 5)
+    st.subheader("2) إدارة الواردات")
+    import_cut = st.slider("خفض الواردات غير الأساسية (%)", 0, 60, 10, 5)
 
-<FollowUp label="هل ترغبين في إضافة قطاعات إضافية مثل إيرادات الاتصالات أو الكهرباء والطاقة إلى نموذج المحاكاة في مختبر السياسات؟" query="نعم، قومي بإضافة قطاعي الاتصالات والطاقة إلى نموذج المحاكاة ومختبر السياسات."/>
+    extra_agri = latest["agri_exports_usd_m"] * agri_increase / 100
+    extra_gold = latest["gold_exports_usd_m"] * gold_increase / 100
+    reduced_imports = latest["nonessential_imports_usd_m"] * import_cut / 100
+    scenario_exports = latest["exports_usd_m"] + extra_agri + extra_gold
+    scenario_imports = latest["imports_usd_m"] - reduced_imports
+    scenario_balance = scenario_exports - scenario_imports
+    scenario_coverage = (scenario_exports / scenario_imports * 100) if scenario_imports > 0 else np.nan
+
+    st.subheader("نتيجة السيناريو")
+    x1, x2, x3 = st.columns(3)
+    with x1:
+        metric_card("الصادرات بعد السيناريو", f"{scenario_exports:,.1f} مليون $")
+    with x2:
+        metric_card("الواردات بعد السيناريو", f"{scenario_imports:,.1f} مليون $")
+    with x3:
+        metric_card("الميزان التجاري الجديد", f"{scenario_balance:,.1f} مليون $")
+    st.metric("تغطية الواردات بعد السيناريو", f"{scenario_coverage:,.1f}%")
+    st.write("التحسن الحسابي في الميزان التجاري:",
+             f"**{scenario_balance - latest['trade_balance_usd_m']:,.1f} مليون دولار**.")
+    compare = pd.DataFrame({
+        "الحالة": ["قبل السيناريو", "بعد السيناريو"],
+        "الصادرات": [latest["exports_usd_m"], scenario_exports],
+        "الواردات": [latest["imports_usd_m"], scenario_imports],
+    })
+    fig = go.Figure()
+    fig.add_trace(go.Bar(name="الصادرات", x=compare["الحالة"], y=compare["الصادرات"]))
+    fig.add_trace(go.Bar(name="الواردات", x=compare["الحالة"], y=compare["الواردات"]))
+    fig.update_layout(barmode="group", title="مقارنة الصادرات والواردات", template="plotly_white", title_x=.98)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("لا تستنتج من تحسن الميزان التجاري وحده أن سعر الصرف سيتحسن تلقائياً؛ توجد عوامل أخرى كثيرة.")
+
+elif page == "المستشار الاقتصادي":
+    section("المستشار الاقتصادي — تشخيص أولي وتوصيات")
+    st.write(f"التشخيص مبني على آخر سنة متاحة: **{year_latest}**.")
+    recommendations = []
+
+    if latest["trade_balance_usd_m"] < 0:
+        recommendations.append((
+            "العجز التجاري",
+            f"العجز التجاري يبلغ {abs(latest['trade_balance_usd_m']):,.1f} مليون دولار.",
+            "رفع القدرة التصديرية تدريجياً، وتحسين الخدمات اللوجستية، ومراجعة الواردات غير الأساسية دون المساس بالغذاء والدواء ومدخلات الإنتاج."
+        ))
+    else:
+        recommendations.append((
+            "الميزان التجاري",
+            f"يوجد فائض تجاري قدره {latest['trade_balance_usd_m']:,.1f} مليون دولار وفق البيانات.",
+            "تحليل استدامة الفائض ومصادره، وتوجيه النقد الأجنبي لدعم الإنتاج والاستثمار."
+        ))
+
+    if latest["gold_share_pct"] > 40:
+        recommendations.append((
+            "تركيز الصادرات في الذهب",
+            f"حصة الذهب {latest['gold_share_pct']:.1f}% من الصادرات.",
+            "تنويع الصادرات ورفع القيمة المضافة محلياً، وتحسين شفافية بيانات الإنتاج والتصدير."
+        ))
+    else:
+        recommendations.append((
+            "تنويع الصادرات",
+            f"حصة الذهب {latest['gold_share_pct']:.1f}% من الصادرات.",
+            "متابعة تنوع السلع المصدرة وعدم الاعتماد على سلعة واحدة، مع دعم القطاعات القابلة للتوسع."
+        ))
+
+    if latest["fx_gap_pct"] > 20:
+        recommendations.append((
+            "فجوة سعر الصرف",
+            f"الفجوة المحسوبة {latest['fx_gap_pct']:.1f}%.",
+            "تحسين تدفق النقد الأجنبي عبر الصادرات والتحويلات والقنوات الرسمية، وزيادة الثقة والشفافية؛ مع تجنب الوعود بخفض سريع للسعر."
+        ))
+    if latest["inflation_pct"] > 20:
+        recommendations.append((
+            "ضغط التضخم",
+            f"التضخم السنوي {latest['inflation_pct']:.1f}%.",
+            "حماية الإنتاج وسلاسل الإمداد، وتحسين إدارة المالية العامة، ونشر بيانات دورية للأسعار؛ مع تقييم أثر أي إجراء على الأسر محدودة الدخل."
+        ))
+    if latest["essential_import_share_pct"] > 80:
+        recommendations.append((
+            "هيكل الواردات",
+            f"{latest['essential_import_share_pct']:.1f}% من الواردات مصنفة كأساسية.",
+            "تجنب الخفض العشوائي للواردات، والتركيز على إحلال مدروس للسلع التي يمكن إنتاجها محلياً بكفاءة."
+        ))
+    if pd.notna(latest["m2_growth_pct"]) and latest["m2_growth_pct"] > 30:
+        recommendations.append((
+            "نمو عرض النقود",
+            f"نمو M2 بين آخر سنتين {latest['m2_growth_pct']:.1f}%.",
+            "تحليل مصادر نمو السيولة وربطها بالإنتاج والتمويل والعجز، وعدم افتراض أن العلاقة مع التضخم آلية أو فورية."
+        ))
+
+    for title, evidence, action in recommendations:
+        with st.container(border=True):
+            st.markdown(f"### {title}")
+            st.write("**الدليل من البيانات:** " + evidence)
+            st.write("**مسار عمل مقترح:** " + action)
+
+    st.markdown("""
+    <div class="info-box">
+    هذه توصيات أولية مولدة من قواعد واضحة، وليست استشارة حكومية أو دراسة أثر مكتملة.
+    يجب اختبار كل توصية ببيانات إضافية، وتقدير تكلفتها، والفئات المستفيدة والمتضررة، والمدة اللازمة.
+    </div>""", unsafe_allow_html=True)
+
+elif page == "البيانات والمصادر":
+    section("مركز البيانات والمصادر")
+    st.write("الأعمدة المطلوبة في ملف CSV:")
+    schema = pd.DataFrame({
+        "اسم العمود": REQUIRED_COLUMNS,
+        "المعنى": [COLUMN_LABELS[c] for c in REQUIRED_COLUMNS],
+    })
+    st.dataframe(schema, use_container_width=True, hide_index=True)
+    st.subheader("البيانات المستخدمة حالياً")
+    st.dataframe(data, use_container_width=True, hide_index=True)
+    csv_out = data.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        "تنزيل البيانات الحالية CSV",
+        data=csv_out,
+        file_name="sudan_economic_data_template.csv",
+        mime="text/csv",
+    )
+    st.subheader("مصادر رسمية ومراجع للبحث عن البيانات")
+    st.markdown("""
+    - **بنك السودان المركزي:** التقارير السنوية والنشرات الإحصائية والبيانات النقدية.
+    - **الجهاز المركزي للإحصاء السوداني:** مؤشرات الأسعار والتضخم والإحصاءات السكانية والإنتاجية.
+    - **وزارة المالية والتخطيط الاقتصادي:** الموازنة العامة والإيرادات والإنفاق والعجز.
+    - **صندوق النقد الدولي:** قواعد بيانات الاقتصاد الكلي وتقارير السودان.
+    - **البنك الدولي:** مؤشرات التنمية والاقتصاد الكلي.
+    - **UN Comtrade:** بيانات التجارة السلعية حسب الدولة والسلعة والشريك التجاري.
+    - **FAOSTAT:** الإنتاج الزراعي والثروة الحيوانية.
+    """)
+    st.markdown("""
+    <div class="warning-box">
+    لا يكفي كتابة اسم جهة كمصدر. لكل رقم في النسخة البحثية أضف رابط الجدول أو التقرير، سنة النشر،
+    تاريخ الاطلاع، وحدة القياس، وما إذا كانت القيمة فعلية أو تقديرية أو أولية.
+    </div>""", unsafe_allow_html=True)
+    st.subheader("قالب توثيق مقترح")
+    citation_template = pd.DataFrame([
+        ["exports_usd_m", "رابط المصدر الأصلي", "2024", "مليون دولار", "فعلي/تقديري", "تاريخ الاطلاع"],
+        ["inflation_pct", "رابط المصدر الأصلي", "2024", "% سنوي", "فعلي/تقديري", "تاريخ الاطلاع"],
+    ], columns=["المتغير", "رابط المصدر", "السنة", "الوحدة", "نوع الرقم", "تاريخ الاطلاع"])
+    st.dataframe(citation_template, use_container_width=True, hide_index=True)
+
+st.markdown("---")
+st.markdown(
+    "<div style='text-align:center;color:#758596;font-size:12px;direction:rtl'>"
+    "الجنيه أولاً | مشروع تحليل اقتصادي تعليمي — تُحدّث النتائج عند رفع بيانات موثقة"
+    "</div>",
+    unsafe_allow_html=True,
+)
+ 
