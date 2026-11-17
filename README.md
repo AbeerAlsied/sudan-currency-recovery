@@ -1,2 +1,43 @@
-# sudan-currency-recovery
-An AI-powered economic analysis platform to study Sudan's economy, analyze currency challenges, and explore data-driven solutions for strengthening the Sudanese Pound.
+# الجنيه أولاً 🇸🇩 — Sudan Economic Monitor
+
+لوحة أولية باستخدام Streamlit لتحليل بعض المؤشرات الاقتصادية السودانية.
+
+## تشغيل المشروع محلياً
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## النشر على GitHub و Streamlit Community Cloud
+
+1. أنشئ مستودع GitHub جديداً.
+2. ارفع الملفات: `app.py`, `requirements.txt`, `sample_data.csv`, `README.md`.
+3. افتح Streamlit Community Cloud واربط حساب GitHub.
+4. اختر المستودع والفرع وملف `app.py` ثم Deploy.
+
+## مهم جداً عن البيانات
+
+ملف `sample_data.csv` يحتوي أرقاماً **مصطنعة للتجربة فقط**. لا تمثل إحصاءات السودان ولا يجوز الاستشهاد بها.
+استبدلها ببيانات موثقة قبل أي تحليل أو استنتاج.
+
+## تنسيق ملف CSV المطلوب
+
+يجب أن يحتوي الملف على الأعمدة التالية بالضبط:
+
+- `year`
+- `exports_usd_m`
+- `imports_usd_m`
+- `inflation_pct`
+- `fx_reserves_usd_m`
+- `gold_exports_usd_m`
+- `agriculture_exports_usd_m`
+
+جميع قيم الدولار في هذا النموذج بوحدة مليون دولار أمريكي.
+
+## حدود النسخة الحالية
+
+- تعرض الاتجاهات الحسابية ولا تتنبأ بسعر الصرف.
+- مختبر السيناريوهات يوضح أثر افتراضات المستخدم على الصادرات والواردات فقط.
+- لا يستنتج أن تحسن الميزان التجاري سيؤدي آلياً إلى ارتفاع الجنيه.
+- قبل بناء نموذج تعلم آلي نحتاج سلسلة زمنية موثوقة، وتعريفاً واضحاً للمتغير المراد التنبؤ به، ومراجعة لجودة البيانات.
