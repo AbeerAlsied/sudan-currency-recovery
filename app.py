@@ -6,10 +6,23 @@ st.set_page_config(page_title="الجنيه أولاً | Sudan Economic Monitor"
 
 st.markdown("""
 <style>
-html, body, [class*="css"] { direction: rtl; text-align: right; }
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+
+html, body, [class*="css"] {
+    direction: rtl;
+    text-align: right;
+    font-family: 'Cairo', sans-serif !important;
+}
+
 .block-container {padding-top: 1.6rem;}
 [data-testid="stMetric"] {background:#f3f7fa;padding:14px;border-radius:12px;border:1px solid #dce6ee;}
 .note {background:#fff7df;border-right:5px solid #d99b22;padding:12px;border-radius:8px;}
+
+/* إصلاح تداخل العناوين والنصوص العربية على الجوال */
+h1, h2, h3, h4, h5, h6, p, span, label, div {
+    direction: rtl !important;
+    text-align: right !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -36,7 +49,6 @@ AR = {
 }
 
 def demo_data():
-    # Illustrative values only. Replace with sourced, verified data.
     return pd.DataFrame([
         [2018, 4200, 7800, 63, 1400, 1500, 900],
         [2019, 3900, 7600, 51, 1250, 1400, 850],
